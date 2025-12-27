@@ -2,58 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Virtual Football Predictor</title>
+<title>Interactive Football Predictor</title>
 <style>
 * { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  font-family: "Poppins", system-ui, sans-serif;
-  background: radial-gradient(circle at top, #081a2f 0%, #020b16 70%);
-  color: #fff;
-  min-height: 100vh;
-  text-align: center;
-}
-
-.header { margin-top: 24px; }
-h1 { margin: 0; font-size: 24px; font-weight: 600; }
-h1 span { color: #00ffd5; }
-
-.panel { margin: 20px auto; width: 92%; max-width: 420px; display: flex; flex-direction: column; gap: 10px; }
-select, input[type=file], button { padding: 14px; border-radius: 14px; border: none; font-size: 15px; }
-select, input[type=file] { background: #0e223a; color: #ccc; }
-button {
-  font-weight: 600; cursor: pointer;
-  background: linear-gradient(135deg, #00ffd5, #00b3ff);
-  color: #000; box-shadow: 0 0 25px rgba(0,255,213,.45);
-}
-button:disabled { opacity: .5; cursor: not-allowed; }
-
-.status { margin-top: 18px; font-size: 15px; opacity: .9; min-height: 24px; }
-.results { margin: 22px auto 0; width: 92%; max-width: 420px; display: grid; gap: 14px; }
-.card { background: linear-gradient(180deg, #0f2742, #091a2d); border-radius: 16px; padding: 14px; text-align: left; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
-.card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
-.card .pick { font-size: 14px; }
-.highlight { color: #00ffd5; font-weight: 600; }
-.cooldown { margin-top: 16px; font-size: 14px; opacity: .8; }
+body { margin:0; font-family:"Poppins",sans-serif; background: radial-gradient(circle at top,#081a2f 0%,#020b16 70%); color:#fff; text-align:center; min-height:100vh; }
+.header { margin-top:24px; }
+h1 { margin:0; font-size:24px; font-weight:600; }
+h1 span { color:#00ffd5; }
+.panel { margin:20px auto; width:92%; max-width:500px; display:flex; flex-direction:column; gap:10px; }
+select, button { padding:14px; border-radius:14px; border:none; font-size:15px; }
+select { background:#0e223a; color:#ccc; }
+button { font-weight:600; cursor:pointer; background: linear-gradient(135deg,#00ffd5,#00b3ff); color:#000; box-shadow:0 0 25px rgba(0,255,213,.45); }
+button:disabled { opacity:.5; cursor:not-allowed; }
+.teams { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:10px; }
+.team-option { padding:10px 14px; border-radius:14px; background:#0e223a; cursor:pointer; user-select:none; }
+.team-option.selected { background:#00ffd5; color:#000; font-weight:600; }
+.matches { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+.match-option { background:#0e223a; padding:10px 14px; border-radius:14px; display:flex; justify-content:space-between; cursor:pointer; }
+.match-option input { cursor:pointer; }
+.status { margin-top:18px; font-size:15px; opacity:.9; min-height:24px; }
+.results { margin:22px auto 0; width:92%; max-width:500px; display:grid; gap:14px; }
+.card { background: linear-gradient(180deg,#0f2742,#091a2d); border-radius:16px; padding:14px; text-align:left; box-shadow:0 8px 20px rgba(0,0,0,.45); transition: transform .3s; }
+.card:hover { transform: scale(1.03); }
+.card h3 { margin:0 0 6px; font-size:15px; font-weight:600; }
+.card .pick { font-size:14px; }
+.highlight { color:#00ffd5; font-weight:600; }
+.cooldown { margin-top:16px; font-size:14px; opacity:.8; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1><span>Virtual</span> Football Predictor</h1>
+  <h1><span>Interactive</span> Football Predictor</h1>
 </div>
 
 <div class="panel">
-  <select id="country">
+  <select id="country" onchange="showTeams()">
     <option value="">Select Country</option>
     <option value="England">England</option>
     <option value="Spain">Spain</option>
     <option value="Italy">Italy</option>
     <option value="Germany">Germany</option>
   </select>
-  <input type="file" id="shot" accept="image/*">
-  <button id="analyzeBtn" onclick="analyze()">ANALYZE SCREENSHOT</button>
+  <div class="teams" id="teamsContainer"></div>
+  <div class="matches" id="matchesContainer"></div>
+  <button onclick="startAnalysis()">GENERATE PREDICTIONS</button>
 </div>
 
 <div class="status" id="status"></div>
@@ -61,137 +54,106 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 <div class="cooldown" id="cooldown"></div>
 
 <script>
-let locked = false;
+const countryTeams = {
+  England:["Manchester United","Liverpool","Chelsea","Arsenal","Man City","Tottenham","Leicester","Everton","West Ham","Newcastle"],
+  Spain:["Real Madrid","Barcelona","Atletico Madrid","Sevilla","Valencia","Villarreal","Real Sociedad","Betis","Celta Vigo","Espanyol"],
+  Italy:["Juventus","Inter Milan","AC Milan","Napoli","Roma","Lazio","Atalanta","Fiorentina","Sampdoria","Torino"],
+  Germany:["Bayern Munich","Dortmund","Leverkusen","RB Leipzig","Schalke","Wolfsburg","Borussia Monchengladbach","Eintracht Frankfurt","Freiburg","Union Berlin"]
+};
 
 const markets = {
-  safe: [
-    "Home / Draw (1X)",
-    "Away / Draw (2X)",
-    "Over 1.5 Goals",
-    "Under 2.5 Goals",
-    "Under 3.5 Goals",
-    "Team to Score Over 0.5"
-  ],
+  safe: ["Home / Draw (1X)","Away / Draw (2X)","Over 1.5 Goals","Under 2.5 Goals","Under 3.5 Goals","Team to Score Over 0.5"],
   risky: ["No Draw (12)"],
-  onex2: ["HOME WIN (1X2)", "DRAW (1X2)", "AWAY WIN (1X2)"]
+  onex2: ["HOME WIN (1X2)","DRAW (1X2)","AWAY WIN (1X2)"]
 };
 
-const countryTeams = {
-  England: [
-    "Manchester United vs Liverpool",
-    "Chelsea vs Arsenal",
-    "Man City vs Tottenham",
-    "Leicester vs Everton",
-    "West Ham vs Newcastle"
-  ],
-  Spain: [
-    "Real Madrid vs Barcelona",
-    "Atletico Madrid vs Sevilla",
-    "Valencia vs Villarreal",
-    "Real Sociedad vs Betis",
-    "Celta Vigo vs Espanyol"
-  ],
-  Italy: [
-    "Juventus vs Inter Milan",
-    "AC Milan vs Napoli",
-    "Roma vs Lazio",
-    "Atalanta vs Fiorentina",
-    "Sampdoria vs Torino"
-  ],
-  Germany: [
-    "Bayern Munich vs Dortmund",
-    "Leverkusen vs RB Leipzig",
-    "Schalke vs Wolfsburg",
-    "Borussia Monchengladbach vs Eintracht Frankfurt",
-    "Freiburg vs Union Berlin"
-  ]
-};
+let selectedTeams=[]; 
+let selectedMatches=[]; 
+let locked=false;
 
-async function analyze() {
-  if (locked) return;
+function sleep(ms){return new Promise(res=>setTimeout(res,ms));}
 
-  const country = document.getElementById("country").value;
-  const file = document.getElementById("shot").files[0];
+function showTeams(){
+  const country=document.getElementById("country").value;
+  const container=document.getElementById("teamsContainer");
+  const matchContainer=document.getElementById("matchesContainer");
+  container.innerHTML=""; matchContainer.innerHTML="";
+  selectedTeams=[]; selectedMatches=[];
 
-  if (!country) { alert("Select a country."); return; }
-  if (!file) { alert("Upload a screenshot."); return; }
-
-  locked = true;
-  document.getElementById("analyzeBtn").disabled = true;
-  const status = document.getElementById("status");
-  const results = document.getElementById("results");
-  const cooldown = document.getElementById("cooldown");
-
-  results.innerHTML = "";
-  cooldown.innerHTML = "";
-
-  const steps = [
-    `📸 Screenshot received<br>⚽ Country: ${country}`,
-    "🔍 Extracting team names from screenshot...",
-    "📊 Calculating safest matches...",
-    "⚙️ Assigning markets & confidence...",
-    "✅ Analysis complete!"
-  ];
-
-  for (let i = 0; i < steps.length; i++) {
-    status.innerHTML = steps[i];
-    await sleep(1500);
-  }
-
-  status.innerHTML = "";
-
-  const extractedTeams = [...countryTeams[country]];
-  const selectedMatches = extractedTeams.sort(() => Math.random() - 0.5).slice(0, 3);
-  let onex2Used = false;
-
-  selectedMatches.forEach(matchName => {
-    let market;
-    if (!onex2Used && Math.random() < 0.33) {
-      market = markets.onex2[Math.floor(Math.random() * markets.onex2.length)];
-      onex2Used = true;
-    } else {
-      const pool = [...markets.safe, ...markets.risky];
-      market = pool[Math.floor(Math.random() * pool.length)];
+  if(!country) return;
+  countryTeams[country].forEach(team=>{
+    const div=document.createElement("div");
+    div.className="team-option";
+    div.innerText=team;
+    div.onclick=()=>{
+      if(div.classList.contains("selected")){
+        div.classList.remove("selected");
+        selectedTeams=selectedTeams.filter(t=>t!==team);
+      } else {
+        div.classList.add("selected");
+        selectedTeams.push(team);
+      }
+      generateMatches();
     }
+    container.appendChild(div);
+  });
+}
 
-    const confidence = market.includes("1X2")
-      ? Math.floor(Math.random() * 5) + 90
-      : Math.floor(Math.random() * 6) + 92;
+function generateMatches(){
+  const matchContainer=document.getElementById("matchesContainer");
+  matchContainer.innerHTML="";
+  selectedMatches=[];
+  if(selectedTeams.length<2) return;
 
-    results.innerHTML += `
-      <div class="card">
-        <h3>${matchName}</h3>
-        <div class="pick">
-          🎯 Market: <span class="highlight">${market}</span><br>
-          📊 Confidence: <span class="highlight">${confidence}%</span>
-        </div>
-      </div>
-    `;
+  for(let i=0;i<selectedTeams.length-1;i+=2){
+    const matchName=`${selectedTeams[i]} vs ${selectedTeams[i+1]}`;
+    const div=document.createElement("div");
+    div.className="match-option";
+    div.innerHTML=`<span>${matchName}</span><input type="checkbox" checked />`;
+    const checkbox=div.querySelector("input");
+    checkbox.onchange=()=>{
+      if(checkbox.checked) selectedMatches.push(matchName);
+      else selectedMatches=selectedMatches.filter(m=>m!==matchName);
+    }
+    selectedMatches.push(matchName);
+    matchContainer.appendChild(div);
+  }
+}
+
+async function startAnalysis(){
+  if(locked) return;
+  if(selectedMatches.length<1){alert("Select at least 1 match."); return;}
+  locked=true;
+  document.getElementById("status").innerText="📊 Generating predictions...";
+  document.getElementById("results").innerHTML="";
+  document.getElementById("cooldown").innerText="";
+  await sleep(1000);
+
+  let onex2Used=false;
+
+  selectedMatches.forEach(match=>{
+    let market;
+    if(!onex2Used && Math.random()<0.33){market=markets.onex2[Math.floor(Math.random()*markets.onex2.length)]; onex2Used=true;}
+    else{const pool=[...markets.safe,...markets.risky]; market=pool[Math.floor(Math.random()*pool.length)];}
+
+    const confidence=market.includes("1X2")? Math.floor(Math.random()*5)+90 : Math.floor(Math.random()*6)+92;
+    document.getElementById("results").innerHTML+=
+      `<div class="card"><h3>${match}</h3><div class="pick">🎯 Market: <span class="highlight">${market}</span><br>📊 Confidence: <span class="highlight">${confidence}%</span></div></div>`;
   });
 
   startCooldown();
+  document.getElementById("status").innerText="✅ Predictions generated!";
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function startCooldown() {
-  let time = 60;
-  const cd = document.getElementById("cooldown");
-  cd.innerText = `⏳ Next analysis in ${time}s`;
-
-  const timer = setInterval(() => {
-    time--;
-    cd.innerText = `⏳ Next analysis in ${time}s`;
-    if (time <= 0) {
-      clearInterval(timer);
-      locked = false;
-      document.getElementById("analyzeBtn").disabled = false;
-      document.getElementById("shot").value = "";
-      cd.innerText = "";
-    }
-  }, 1000);
+function startCooldown(){
+  let t=10;
+  const cd=document.getElementById("cooldown");
+  cd.innerText=`⏳ Next analysis in ${t}s`;
+  const timer=setInterval(()=>{
+    t--;
+    cd.innerText=`⏳ Next analysis in ${t}s`;
+    if(t<=0){clearInterval(timer); locked=false; cd.innerText="";}
+  },1000);
 }
 </script>
 
